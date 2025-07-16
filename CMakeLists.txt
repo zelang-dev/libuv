@@ -23,7 +23,7 @@ set(CMAKE_CONFIGURATION_TYPES=Debug;Release)
 set(CMAKE_C_VISIBILITY_PRESET hidden)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
-set(CMAKE_C_STANDARD 90)
+set(CMAKE_C_STANDARD 11)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -587,6 +587,7 @@ if(LIBUV_BUILD_TESTS)
        test/test-loop-close.c
        test/test-loop-configure.c
        test/test-loop-handles.c
+       test/test-loop-oom.c
        test/test-loop-stop.c
        test/test-loop-time.c
        test/test-metrics.c
@@ -748,6 +749,14 @@ if(LIBUV_BUILD_TESTS)
                        COMMAND "${CMAKE_COMMAND}" -E copy
                        "$<TARGET_FILE:uv_run_tests_a>"
                        "$<TARGET_FILE_DIR:uv_run_tests_a>/uv_run_tests_a_no_ext")
+  endif()
+
+  if(QNX)
+    install(TARGETS uv_run_tests uv_run_tests_a uv_run_benchmarks_a
+            DESTINATION ${CMAKE_INSTALL_BINDIR}/libuv_tests)
+
+    install(DIRECTORY test/fixtures
+            DESTINATION ${CMAKE_INSTALL_BINDIR}/libuv_tests)
   endif()
 endif()
 

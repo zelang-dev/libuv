@@ -40,7 +40,7 @@
 #ifdef __MVS__
 #include "zos-base.h"
 /* Initialize environment and zoslib */
-__attribute__((constructor)) void init() {
+__attribute__((constructor)) void init(void) {
   zoslib_config_t config;
   init_zoslib_config(&config);
   init_zoslib(config);
@@ -223,7 +223,7 @@ static int maybe_run_test(int argc, char **argv) {
     ASSERT_GT((intptr_t) closed_fd, 0);
     ASSERT_GT((intptr_t) open_fd, 0);
     ASSERT_NE(0, GetHandleInformation(open_fd, &flags));
-    kernelbase_module = GetModuleHandleA("kernelbase.dll");
+    kernelbase_module = GetModuleHandleW(L"kernelbase.dll");
     pCompareObjectHandles = (sCompareObjectHandles)
         GetProcAddress(kernelbase_module, "CompareObjectHandles");
     ASSERT_NE(pCompareObjectHandles == NULL || \

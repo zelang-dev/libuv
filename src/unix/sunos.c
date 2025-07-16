@@ -546,8 +546,15 @@ int uv_fs_event_start(uv_fs_event_t* handle,
   }
 
   if (first_run) {
-    uv__io_init(&handle->loop->fs_event_watcher, uv__fs_event_read, portfd);
-    uv__io_start(handle->loop, &handle->loop->fs_event_watcher, POLLIN);
+    err = uv__io_init_start(handle->loop,
+                             &handle->loop->fs_event_watcher,
+                             uv__fs_event_read,
+                             portfd,
+                             POLLIN);
+    if (err)
+      uv__handle_stop(handle);
+
+    return err;
   }
 
   return 0;
@@ -890,11 +897,6 @@ int uv_interface_addresses(uv_interface_address_t** addresses, int* count) {
   return 0;
 }
 #endif  /* SUNOS_NO_IFADDRS */
-
-void uv_free_interface_addresses(uv_interface_address_t* addresses,
-                                 int count) {
-  uv__free(addresses);
-}
 
 
 #if !defined(_POSIX_VERSION) || _POSIX_VERSION < 200809L

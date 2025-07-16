@@ -21,13 +21,12 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - {toolchain: Visual Studio 16 2019, arch: Win32, server: 2019}
-          - {toolchain: Visual Studio 16 2019, arch: x64, server: 2019}
           - {toolchain: Visual Studio 17 2022, arch: Win32, server: 2022}
           - {toolchain: Visual Studio 17 2022, arch: x64, server: 2022}
           - {toolchain: Visual Studio 17 2022, arch: x64, server: 2022, config: ASAN}
           - {toolchain: Visual Studio 17 2022, arch: x64, server: 2022, config: UBSAN}
           - {toolchain: Visual Studio 17 2022, arch: arm64, server: 2022}
+          - {toolchain: Visual Studio 17 2022, arch: x64, server: 2025}
     steps:
       - uses: actions/checkout@v4
       - name: Build
@@ -87,7 +86,7 @@ jobs:
           sudo apt install mingw-w64 ninja-build -y
       - name: Build
         run: |
-          cmake -S . -B build -G Ninja -DHOST_ARCH=${{ matrix.config.arch }} -DBUILD_TESTING=ON -DCMAKE_TOOLCHAIN_FILE=cmake-toolchains/cross-mingw32.cmake
+          cmake -B build -G Ninja -DHOST_ARCH=${{ matrix.config.arch }} -DBUILD_TESTING=ON -DCMAKE_TOOLCHAIN_FILE=cmake-toolchains/cross-mingw32.cmake
           cmake --build build
           cmake --install build --prefix "`pwd`/build/usr"
           mkdir -p build/usr/test build/usr/bin

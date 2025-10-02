@@ -267,9 +267,6 @@ struct watcher_root {
 };
 
 static int uv__inotify_fork(uv_loop_t* loop, struct watcher_list* root);
-static void uv__inotify_read(uv_loop_t* loop,
-                             uv__io_t* w,
-                             unsigned int revents);
 static int compare_watchers(const struct watcher_list* a,
                             const struct watcher_list* b);
 static void maybe_free_watcher_list(struct watcher_list* w,
@@ -1562,7 +1559,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
           have_signals = 1;
         } else {
           uv__metrics_update_idle_time(loop);
-          w->cb(loop, w, pe->events);
+          uv__io_cb(loop, w, pe->events);
         }
 
         nevents++;
@@ -1578,7 +1575,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 
     if (have_signals != 0) {
       uv__metrics_update_idle_time(loop);
-      loop->signal_io_watcher.cb(loop, &loop->signal_io_watcher, POLLIN);
+      uv__signal_event(loop, &loop->signal_io_watcher, POLLIN);
     }
 
     lfields->inv = NULL;
@@ -1750,7 +1747,7 @@ int uv_cpu_info(uv_cpu_info_t** ci, int* count) {
     "0xd0b\nCortex-A76\n"   "0xd0c\nNeoverse-N1\n"  "0xd0d\nCortex-A77\n"
     "0xd0e\nCortex-A76AE\n" "0xd13\nCortex-R52\n"   "0xd20\nCortex-M23\n"
     "0xd21\nCortex-M33\n"   "0xd41\nCortex-A78\n"   "0xd42\nCortex-A78AE\n"
-    "0xd4a\nNeoverse-E1\n"  "0xd4b\nCortex-A78C\n"
+    "0xd4a\nNeoverse-E1\n"  "0xd4b\nCortex-A78C\n"  "0xd4f\nNeoverse-V2\n"
 #endif
     "";
   struct cpu {
@@ -2494,7 +2491,7 @@ static int init_inotify(uv_loop_t* loop) {
   if (fd < 0)
     return UV__ERR(errno);
 
-  err = uv__io_init_start(loop, &loop->inotify_read_watcher, uv__inotify_read,
+  err = uv__io_init_start(loop, &loop->inotify_read_watcher, UV__INOTIFY_READ,
                           fd, POLLIN);
   if (err) {
     uv__close(fd);
@@ -2590,9 +2587,7 @@ static void maybe_free_watcher_list(struct watcher_list* w, uv_loop_t* loop) {
 }
 
 
-static void uv__inotify_read(uv_loop_t* loop,
-                             uv__io_t* dummy,
-                             unsigned int events) {
+void uv__inotify_read(uv_loop_t* loop, uv__io_t* dummy, unsigned int events) {
   const struct inotify_event* e;
   struct watcher_list* w;
   uv_fs_event_t* h;

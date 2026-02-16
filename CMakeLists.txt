@@ -17,15 +17,13 @@ include(CheckCCompilerFlag)
 include(GNUInstallDirs)
 include(CTest)
 
-message("Generated with config types: ${CMAKE_CONFIGURATION_TYPES}")
-set(CMAKE_CONFIGURATION_TYPES=Debug;Release)
-
 set(CMAKE_C_VISIBILITY_PRESET hidden)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 set(CMAKE_C_STANDARD 11)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 
 option(LIBUV_BUILD_SHARED "Build shared lib" ON)
 
@@ -786,6 +784,11 @@ install(TARGETS uv_a EXPORT libuvConfig
 install(EXPORT libuvConfig
 	DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/libuv
 	NAMESPACE libuv::)
+write_basic_package_version_file(libuvConfigVersion.cmake
+                                 VERSION ${PACKAGE_VERSION}
+                                 COMPATIBILITY SameMajorVersion)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libuvConfigVersion.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/libuv)
 
 if(LIBUV_BUILD_SHARED)
   # The version in the filename is mirroring the behaviour of autotools.
@@ -827,98 +830,76 @@ message(STATUS "summary of build options:
       CFLAGS:        ${CMAKE_C_FLAGS_${_build_type}} ${CMAKE_C_FLAGS}
 ")
 
-message("Generated with config types: ${CMAKE_CONFIGURATION_TYPES}")
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/built")
-set_target_properties(${LIB_SELECTED} PROPERTIES VERSION ${UV_VERSION_MAJOR})
-set_target_properties(${LIB_SELECTED} PROPERTIES SOVERSION ${UV_VERSION_MAJOR})
+# clang-tidy support
+option(ENABLE_CLANG_TIDY "Enable clang-tidy checks" ON)
+if(ENABLE_CLANG_TIDY)
+  find_program(CLANG_TIDY_EXE NAMES "clang-tidy")
+  if(CLANG_TIDY_EXE)
+    set(CMAKE_C_CLANG_TIDY "${CLANG_TIDY_EXE}")
+    message(STATUS "clang-tidy found: ${CLANG_TIDY_EXE}")
+  else()
+    set(CMAKE_C_CLANG_TIDY "clang-tidy")
+    message(STATUS "clang-tidy not found: install clang-tidy or set -DCLANG_TIDY_EXE to run tidy analysis on this platform")
+  endif()
 
-set(_fmt TGZ)
-if(WIN32)
-  set(_fmt ZIP)
+  # Collect source files from existing targets (deduplicated)
+  set(ALL_SOURCE_FILES)
+  set(SRC_TARGETS)
+  set(TEST_TARGETS)
+  set(TIDY_TARGETS)
+
+  # Add main library sources
+  list(APPEND ALL_SOURCE_FILES ${uv_sources})
+
+  # Add test sources if tests are enabled
+  if(LIBUV_BUILD_TESTS)
+    list(APPEND ALL_SOURCE_FILES ${uv_test_sources})
+  endif()
+
+  # Remove duplicates and non-existent files
+  list(REMOVE_DUPLICATES ALL_SOURCE_FILES)
+
+  foreach(SOURCE_FILE ${ALL_SOURCE_FILES})
+    # Create a clean target name
+    string(REPLACE "/" "-" TARGET_NAME ${SOURCE_FILE})
+    string(REGEX REPLACE "\\.[^.]*$" "" TARGET_NAME ${TARGET_NAME})
+    set(FULL_TARGET_NAME "tidy-${TARGET_NAME}")
+
+    # Create individual target for this source file
+    add_custom_target(${FULL_TARGET_NAME}
+      COMMAND ${CMAKE_C_CLANG_TIDY} -p "${CMAKE_BINARY_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE_FILE}"
+      COMMENT "Running clang-tidy on ${SOURCE_FILE}"
+      VERBATIM)
+
+    # Add to appropriate folder list
+    if(SOURCE_FILE MATCHES "^src/")
+      list(APPEND SRC_TARGETS ${FULL_TARGET_NAME})
+    elseif(SOURCE_FILE MATCHES "^test/")
+      list(APPEND TEST_TARGETS ${FULL_TARGET_NAME})
+    endif()
+
+    # Add to list of all tidy targets
+    list(APPEND TIDY_TARGETS ${FULL_TARGET_NAME})
+  endforeach()
+
+  # Create folder-based targets
+  if(SRC_TARGETS)
+    add_custom_target(tidy-src
+      COMMENT "Running clang-tidy on src files"
+      VERBATIM)
+    add_dependencies(tidy-src ${SRC_TARGETS})
+  endif()
+
+  if(TEST_TARGETS)
+    add_custom_target(tidy-test
+      COMMENT "Running clang-tidy on test files"
+      VERBATIM)
+    add_dependencies(tidy-test ${TEST_TARGETS})
+  endif()
+
+  # Create main tidy target that depends on all individual targets
+  add_custom_target(tidy
+    COMMENT "Running clang-tidy on all source files"
+    VERBATIM)
+  add_dependencies(tidy ${TIDY_TARGETS})
 endif()
-
-set(CPACK_GENERATOR ${_fmt})
-set(CPACK_ARCHIVE_COMPONENT_INSTALL ON)
-set(CPACK_DEB_COMPONENT_INSTALL ON)
-set(CPACK_RPM_COMPONENT_INSTALL ON)
-set(CPACK_NUGET_COMPONENT_INSTALL ON)
-set(CPACK_WIX_COMPONENT_INSTALL ON)
-set(CPACK_NSIS_MODIFY_PATH ON)
-set(CPACK_COMPONENTS_ALL_IN_ONE_PACKAGE 1)
-set(CPACK_VERBATIM_VARIABLES YES)
-
-set(CPACK_SOURCE_IGNORE_FILES
-	"~$"
-	"\\\\.svn/"
-	"/CMakeFiles/"
-	"/CMakeCache*"
-	"/cmake_install\\\\.cmake$"
-	"/cmake_uninstall\\\\.cmake$"
-	"^_CPack_.*/"
-	"/CPack*"
-	"\\\\.o$"
-	"/m4/"
-	"/build/"
-	"/built/"
-)
-
-set(INCLUDE_INSTALL_DIR ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}
-    CACHE PATH "Location of header files" )
-
-set(SYSCONFIG_INSTALL_DIR ${CMAKE_INSTALL_SYSCONFDIR}/${PROJECT_NAME}
-    CACHE PATH "Location of configuration files" )
-
-configure_package_config_file(libuvConfig.cmake.in
-  ${CMAKE_CURRENT_BINARY_DIR}/libuvConfig.cmake
-  INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
-  PATH_VARS INCLUDE_INSTALL_DIR SYSCONFIG_INSTALL_DIR)
-
-write_basic_package_version_file(
-  ${CMAKE_CURRENT_BINARY_DIR}/libuvConfigVersion.cmake
-  VERSION ${PACKAGE_VERSION}
-  COMPATIBILITY SameMajorVersion )
-
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libuvConfig.cmake
-              ${CMAKE_CURRENT_BINARY_DIR}/libuvConfigVersion.cmake
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME} )
-
-set(CMAKE_INSTALL_CONFIG_NAME ${CMAKE_BUILD_TYPE})
-set(CPACK_PACKAGE_DIRECTORY "${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}/Package")
-set(CPACK_PACKAGE_FILE_NAME ${CPACK_PACKAGE_NAME})
-set(CPACK_PACKAGE_INSTALL_DIRECTORY libuv)
-
-set(CPACK_PACKAGE_CONTACT "fixme@libuv.org")
-set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Fixme Project Maintainers <${CPACK_PACKAGE_CONTACT}>")
-set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
-set(CPACK_COMPONENTS_GROUPING ALL_COMPONENTS_IN_ONE)
-SET(CPACK_COMPONENT_LIBRARIES_DESCRIPTION "multi-platform support library with a focus on asynchronous I/O.")
-
-set(CPACK_RESOURCE_FILE_LICENSE ${CMAKE_CURRENT_SOURCE_DIR}/LICENSE)
-set(CPACK_RESOURCE_FILE_README ${CMAKE_CURRENT_SOURCE_DIR}/README.md)
-
-set(CPACK_PACKAGE_VENDOR "http://libuv.org/")
-set(CPACK_PACKAGE_VERSION ${PACKAGE_VERSION})
-set(CPACK_PACKAGE_DESCRIPTION ${PROJECT_DESCRIPTION})
-
-set(CPACK_RPM_PACKAGE_LICENSE "MIT")
-set(CPACK_RPM_PACKAGE_URL "http://libuv.org/")
-set(CPACK_RPM_PACKAGE_ARCHITECTURE "noarch")
-
-set(CMAKE_INSTALL_CONFIG_NAME ${CMAKE_BUILD_TYPE})
-install(
-    TARGETS ${LIB_SELECTED}
-    EXPORT "${PROJECT_NAME}Targets"
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
-
-install(
-    EXPORT "${PROJECT_NAME}Targets"
-    FILE "${PROJECT_NAME}Targets.cmake"
-    NAMESPACE ${PROJECT_NAME}::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
-)
-
-set(CPACK_INSTALL_CMAKE_CONFIGURATIONS Release)
-include(CPack)
